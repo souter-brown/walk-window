@@ -2,7 +2,6 @@
 
 import { formatTime } from "@/lib/time-utils";
 import { formatTemp } from "@/lib/temperature";
-import { useHasSavedPreferences } from "@/services/preferences";
 import { useHydrated } from "@/hooks/useHydrated";
 import { StatusBadge } from "@/components/StatusBadge";
 import type { HourlyWeather, SafetyStatus } from "@/types/weather";
@@ -43,7 +42,6 @@ export function CurrentWeatherSummary({
   dogWalkStatus,
 }: CurrentWeatherSummaryProps) {
   const hydrated = useHydrated();
-  const hasSavedPrefs = useHasSavedPreferences();
   const timeLabel =
     timezone && timezone !== Intl.DateTimeFormat().resolvedOptions().timeZone
       ? "Local time"
@@ -96,11 +94,6 @@ export function CurrentWeatherSummary({
             </StatBlock>
           )}
         </div>
-      )}
-      {hydrated && (
-        <p className="mt-2 text-xs text-slate-400">
-          {hasSavedPrefs ? "Preferences saved locally" : "Using default preferences"}
-        </p>
       )}
     </div>
   );

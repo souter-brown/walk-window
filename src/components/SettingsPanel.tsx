@@ -287,7 +287,7 @@ export function SettingsPanel({
           </div>
 
           <p className="text-xs text-slate-500">
-            Settings are saved automatically in your browser.
+            Settings are saved automatically locally in your browser.
           </p>
         </div>
       </div>

@@ -250,11 +250,19 @@ export function Dashboard() {
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-[100rem] flex-1 flex-col px-3 py-3 sm:px-5 sm:py-4">
       <header className="mb-2 flex shrink-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+        <div className="grid min-w-0 grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+          <div className="relative row-span-2 aspect-square overflow-hidden rounded-full shadow-sm">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/brand-mark.png"
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          </div>
+          <h1 className="min-w-0 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
             Walk Window
           </h1>
-          <p className="mt-0.5 text-sm text-slate-600">
+          <p className="min-w-0 text-sm text-slate-600">
             Find the best times to exercise or walk your dog — today and the next two days.
           </p>
         </div>
