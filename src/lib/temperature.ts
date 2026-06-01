@@ -30,14 +30,11 @@ export function convertPreferencesUnits(
     units,
     exercise: {
       ...preferences.exercise,
-      minRealFeel: convert(preferences.exercise.minRealFeel),
       maxRealFeel: convert(preferences.exercise.maxRealFeel),
     },
     dogWalk: {
       ...preferences.dogWalk,
-      minPavement: convert(preferences.dogWalk.minPavement),
       maxPavement: convert(preferences.dogWalk.maxPavement),
-      maxRealFeel: convert(preferences.dogWalk.maxRealFeel),
     },
   };
 }

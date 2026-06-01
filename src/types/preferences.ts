@@ -1,22 +1,13 @@
-export type RainTolerance = "none" | "light" | "any";
-export type DogSensitivity = "low" | "normal" | "high";
 export type TemperatureUnit = "fahrenheit" | "celsius";
 
 export interface ExercisePreferences {
   durationMinutes: number;
-  minRealFeel: number;
   maxRealFeel: number;
-  maxHumidity: number;
-  rainTolerance: RainTolerance;
 }
 
 export interface DogWalkPreferences {
   durationMinutes: number;
-  minPavement: number;
   maxPavement: number;
-  maxRealFeel: number;
-  rainTolerance: RainTolerance;
-  sensitivity: DogSensitivity;
 }
 
 export interface SavedLocation {
@@ -36,19 +27,12 @@ export interface UserPreferences {
 
 export const DEFAULT_EXERCISE: ExercisePreferences = {
   durationMinutes: 45,
-  minRealFeel: 45,
-  maxRealFeel: 85,
-  maxHumidity: 80,
-  rainTolerance: "light",
+  maxRealFeel: 80,
 };
 
 export const DEFAULT_DOG_WALK: DogWalkPreferences = {
   durationMinutes: 25,
-  minPavement: 35,
-  maxPavement: 125,
-  maxRealFeel: 85,
-  rainTolerance: "light",
-  sensitivity: "normal",
+  maxPavement: 110,
 };
 
 export const DEFAULT_PREFERENCES: UserPreferences = {

@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { STORAGE_KEY } from "@/lib/constants";
 import { DEFAULT_PREFERENCES } from "@/types/preferences";
-import type { UserPreferences } from "@/types/preferences";
+import type { UserPreferences, ExercisePreferences, DogWalkPreferences } from "@/types/preferences";
 
 const PREFERENCES_EVENT = "walk-window-preferences";
 
@@ -21,10 +21,18 @@ function parsePreferences(raw: string | null): UserPreferences {
   try {
     const parsed = JSON.parse(raw) as Partial<UserPreferences>;
     return {
-      ...DEFAULT_PREFERENCES,
-      ...parsed,
-      exercise: { ...DEFAULT_PREFERENCES.exercise, ...parsed.exercise },
-      dogWalk: { ...DEFAULT_PREFERENCES.dogWalk, ...parsed.dogWalk },
+      location: parsed.location ?? DEFAULT_PREFERENCES.location,
+      units: parsed.units ?? DEFAULT_PREFERENCES.units,
+      exercise: {
+        durationMinutes:
+          parsed.exercise?.durationMinutes ?? DEFAULT_PREFERENCES.exercise.durationMinutes,
+        maxRealFeel: parsed.exercise?.maxRealFeel ?? DEFAULT_PREFERENCES.exercise.maxRealFeel,
+      },
+      dogWalk: {
+        durationMinutes:
+          parsed.dogWalk?.durationMinutes ?? DEFAULT_PREFERENCES.dogWalk.durationMinutes,
+        maxPavement: parsed.dogWalk?.maxPavement ?? DEFAULT_PREFERENCES.dogWalk.maxPavement,
+      },
     };
   } catch {
     return DEFAULT_PREFERENCES;
@@ -93,7 +101,10 @@ export function useHasSavedPreferences(): boolean {
 }
 
 export function updatePreferences(
-  partial: Partial<UserPreferences>
+  partial: Partial<Omit<UserPreferences, "exercise" | "dogWalk">> & {
+    exercise?: Partial<ExercisePreferences>;
+    dogWalk?: Partial<DogWalkPreferences>;
+  }
 ): UserPreferences {
   const current = loadPreferences();
   const updated: UserPreferences = {

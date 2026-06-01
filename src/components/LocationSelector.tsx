@@ -12,6 +12,8 @@ interface LocationSelectorProps {
   timezone?: string;
   now?: Date;
   compact?: boolean;
+  /** Centered search for the welcome / start screen */
+  welcome?: boolean;
 }
 
 function LocationCaption({
@@ -48,6 +50,27 @@ function LocationCaption({
   );
 }
 
+function MyLocationButton({
+  onClick,
+  disabled,
+  size,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  size: "compact" | "welcome";
+}) {
+  const className =
+    size === "compact"
+      ? "rounded-md border border-slate-400 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+      : "flex-1 rounded-lg border border-slate-400 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
+
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} className={className}>
+      My Location
+    </button>
+  );
+}
+
 export function LocationSelector({
   zip,
   onZipChange,
@@ -58,10 +81,42 @@ export function LocationSelector({
   timezone,
   now,
   compact = false,
+  welcome = false,
 }: LocationSelectorProps) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     onSearch(zip.trim());
+  }
+
+  if (welcome) {
+    return (
+      <form onSubmit={handleSubmit} className="flex flex-col items-center gap-3">
+        <input
+          id="location-welcome"
+          type="text"
+          maxLength={80}
+          placeholder="City or ZIP code"
+          aria-label="City or ZIP code"
+          value={zip}
+          onChange={(e) => onZipChange(e.target.value)}
+          className="w-full rounded-lg border border-slate-400 bg-white px-4 py-2.5 text-center text-base text-slate-900 shadow-sm placeholder:text-slate-500 focus:border-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-200"
+        />
+        <div className="flex w-full items-center justify-center gap-2">
+          <button
+            type="submit"
+            disabled={loading || !zip.trim()}
+            className="min-w-[5.5rem] flex-1 rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading ? "…" : "Go"}
+          </button>
+          <MyLocationButton
+            onClick={onUseLocation}
+            disabled={loading}
+            size="welcome"
+          />
+        </div>
+      </form>
+    );
   }
 
   if (compact) {
@@ -85,28 +140,11 @@ export function LocationSelector({
           >
             {loading ? "…" : "Go"}
           </button>
-          <button
-            type="button"
+          <MyLocationButton
             onClick={onUseLocation}
             disabled={loading}
-            title="Use my location"
-            aria-label="Use my location"
-            className="rounded-md border border-slate-400 bg-white p-1.5 text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-              className="h-4 w-4"
-              aria-hidden="true"
-            >
-              <path
-                fillRule="evenodd"
-                d="M9.69 18.933l.003.001C9.89 19.02 10 19 10 19s.11.02.308-.066l.002-.001.006-.003.018-.008a5.741 5.741 0 0 0 .81-.531c.263-.232.513-.483.738-.752.226-.27.435-.562.618-.87a7.097 7.097 0 0 0 .533-1.033 6.982 6.982 0 0 0 .462-2.282c0-.936-.166-1.832-.462-2.282a7.098 7.098 0 0 0-.533-1.033 7.045 7.045 0 0 0-.618-.87 5.716 5.716 0 0 0-.738-.752 5.74 5.74 0 0 0-.81-.53l-.018-.009-.006-.003ZM10 8.25a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"
-                clipRule="evenodd"
-              />
-            </svg>
-          </button>
+            size="compact"
+          />
         </form>
         {locationName && (
           <LocationCaption
@@ -151,7 +189,7 @@ export function LocationSelector({
             disabled={loading}
             className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
           >
-            Use my location
+            My Location
           </button>
         </div>
       </form>

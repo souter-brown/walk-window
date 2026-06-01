@@ -3,7 +3,6 @@
 import {
   ComposedChart,
   Line,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -11,10 +10,9 @@ import {
   ResponsiveContainer,
   ReferenceLine,
   ReferenceArea,
-  Cell,
 } from "recharts";
 import { useHydrated } from "@/hooks/useHydrated";
-import { useMemo } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { formatHourLabel, formatTime, getChartHour, isSameLocalDay } from "@/lib/time-utils";
 import {
   isExerciseHourSafe,
@@ -39,8 +37,6 @@ interface ChartPoint {
   airTemp: number;
   apparentTemp: number;
   pavementTemp: number;
-  humidity: number;
-  precipProb: number;
   exerciseSafe: boolean;
   dogSafe: boolean;
   exerciseStatus: string;
@@ -71,7 +67,7 @@ const axisProps = {
 const HOUR_AXIS_TICKS = [0, 6, 12, 18, 24];
 
 function formatChartHourTick(hour: number): string {
-  return hour === 24 ? "Midnight" : formatHourLabel(hour);
+  return hour === 24 ? "End of day" : formatHourLabel(hour);
 }
 
 const hourXAxisProps = {
@@ -84,10 +80,6 @@ const hourXAxisProps = {
   tick: axisProps.tick,
   axisLine: axisProps.axisLine,
 };
-
-function getCurrentHour(now: Date, timezone: string): number {
-  return getChartHour(now, timezone);
-}
 
 function normalizeHour(hour: number): number {
   return hour === 24 ? 0 : hour;
@@ -110,8 +102,6 @@ function buildChartData(
         airTemp: Math.round(hour.airTemp),
         apparentTemp: Math.round(hour.apparentTemp),
         pavementTemp: Math.round(hour.pavementTemp),
-        humidity: Math.round(hour.humidity),
-        precipProb: Math.round(hour.precipitationProbability),
         exerciseSafe: exercise.safe,
         dogSafe: dog.safe,
         exerciseStatus: exercise.status,
@@ -130,7 +120,7 @@ function withMidnightAnchor(points: ChartPoint[]): ChartPoint[] {
     {
       ...last,
       hour: 24,
-      hourLabel: "Midnight",
+      hourLabel: "End of day",
     },
   ];
 }
@@ -165,29 +155,68 @@ function TempTooltip({
   );
 }
 
-function MoistureTooltip({
-  active,
-  payload,
-}: {
-  active?: boolean;
-  payload?: Array<{ payload: ChartPoint }>;
-}) {
-  if (!active || !payload?.length) return null;
-  const d = payload[0].payload;
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-lg">
-      <p className="font-semibold text-slate-900">{d.hourLabel}</p>
-      <p>Humidity: {d.humidity}%</p>
-      <p>Rain chance: {d.precipProb}%</p>
-    </div>
-  );
-}
-
 function ChartPlaceholder() {
   return (
     <div className="flex h-full items-center justify-center text-sm text-slate-400">
       Loading chart…
     </div>
+  );
+}
+
+interface ChartLegendVisibility {
+  air: boolean;
+  realFeel: boolean;
+  pavement: boolean;
+  threshold: boolean;
+  good: boolean;
+  caution: boolean;
+  unsafe: boolean;
+}
+
+const DEFAULT_LEGEND_VISIBILITY: ChartLegendVisibility = {
+  air: true,
+  realFeel: true,
+  pavement: true,
+  threshold: true,
+  good: true,
+  caution: true,
+  unsafe: true,
+};
+
+function isShadingStatusVisible(
+  status: string,
+  visibility: ChartLegendVisibility
+): boolean {
+  if (status === "good") return visibility.good;
+  if (status === "caution") return visibility.caution;
+  return visibility.unsafe;
+}
+
+function ChartLegendItem({
+  label,
+  swatch,
+  checked,
+  onChange,
+}: {
+  label: string;
+  swatch: ReactNode;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="flex min-w-0 flex-col items-center gap-1.5 px-1 text-center">
+      <span className="flex items-center justify-center gap-1.5 whitespace-nowrap">
+        {swatch}
+        <span>{label}</span>
+      </span>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="h-3.5 w-3.5 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+        aria-label={`Show ${label}`}
+      />
+    </label>
   );
 }
 
@@ -203,6 +232,7 @@ interface ChartTimeMarker {
   strokeDasharray?: string;
   fill: string;
   fontSize: number;
+  labelPosition: "top" | "insideBottom";
 }
 
 function buildChartTimeMarkers({
@@ -230,6 +260,7 @@ function buildChartTimeMarkers({
       strokeDasharray: "2 4",
       fill: "#a16207",
       fontSize: 11,
+      labelPosition: "insideBottom",
     });
   }
 
@@ -243,6 +274,7 @@ function buildChartTimeMarkers({
       strokeDasharray: "2 4",
       fill: "#a16207",
       fontSize: 11,
+      labelPosition: "insideBottom",
     });
   }
 
@@ -256,6 +288,7 @@ function buildChartTimeMarkers({
       strokeDasharray: "3 3",
       fill: "#1e293b",
       fontSize: 12,
+      labelPosition: "top",
     });
   }
 
@@ -263,13 +296,15 @@ function buildChartTimeMarkers({
 }
 
 function assignChartMarkerLabelOffsets(
-  markers: ChartTimeMarker[]
+  markers: ChartTimeMarker[],
+  labelPosition: ChartTimeMarker["labelPosition"]
 ): Map<string, number> {
   const offsets = new Map<string, number>();
   let tier = 0;
   let previousHour = Number.NEGATIVE_INFINITY;
 
   for (const marker of markers) {
+    if (marker.labelPosition !== labelPosition) continue;
     if (marker.hour - previousHour < MARKER_COLLISION_HOURS) {
       tier += 1;
     } else {
@@ -285,6 +320,11 @@ function assignChartMarkerLabelOffsets(
 function getChartMarkerTopMargin(offsets: Map<string, number>): number {
   const maxOffset = Math.max(0, ...offsets.values());
   return 24 + maxOffset;
+}
+
+function getChartMarkerBottomMargin(offsets: Map<string, number>): number {
+  const maxOffset = Math.max(0, ...offsets.values());
+  return 20 + maxOffset;
 }
 
 function ChartTimeReferenceLines({
@@ -308,8 +348,11 @@ function ChartTimeReferenceLines({
           strokeDasharray={marker.strokeDasharray}
           label={{
             value: marker.text,
-            position: "top",
-            offset: offsets.get(marker.id) ?? 0,
+            position: marker.labelPosition,
+            offset:
+              marker.labelPosition === "insideBottom"
+                ? -(offsets.get(marker.id) ?? 0)
+                : (offsets.get(marker.id) ?? 0),
             fill: marker.fill,
             fontSize: marker.fontSize,
           }}
@@ -325,25 +368,33 @@ function ActivityWindowReferenceLines({
   dayDate,
   timezone,
   yAxisId,
+  now,
+  labelOffset = 0,
 }: {
   mustStartBy: Date | null;
   waitUntilAfter: Date | null;
   dayDate: Date;
   timezone: string;
   yAxisId: string;
+  now: Date;
+  labelOffset?: number;
 }) {
   const lines = [
     {
-      time: mustStartBy,
+      time: mustStartBy && mustStartBy > now ? mustStartBy : null,
       prefix: "Must start",
       stroke: "#7c3aed",
       position: "insideTopRight" as const,
+      offset: labelOffset,
+      multiline: false,
     },
     {
-      time: waitUntilAfter,
+      time: waitUntilAfter && waitUntilAfter > now ? waitUntilAfter : null,
       prefix: "Wait until",
       stroke: "#db2777",
       position: "insideTopLeft" as const,
+      offset: labelOffset + MARKER_LABEL_LINE_HEIGHT,
+      multiline: true,
     },
   ].filter(
     (line): line is typeof line & { time: Date } =>
@@ -352,7 +403,7 @@ function ActivityWindowReferenceLines({
 
   return (
     <>
-      {lines.map(({ time, prefix, stroke, position }) => (
+      {lines.map(({ time, prefix, stroke, position, offset, multiline }) => (
         <ReferenceLine
           key={prefix}
           yAxisId={yAxisId}
@@ -361,8 +412,11 @@ function ActivityWindowReferenceLines({
           strokeWidth={1.5}
           strokeDasharray="4 3"
           label={{
-            value: `${prefix}: ${formatTime(time, timezone)}`,
+            value: multiline
+              ? `${prefix}:\n${formatTime(time, timezone)}`
+              : `${prefix}: ${formatTime(time, timezone)}`,
             position,
+            offset,
             fill: stroke,
             fontSize: 11,
           }}
@@ -388,6 +442,7 @@ export function DayChart({
   units,
 }: DayChartProps) {
   const hydrated = useHydrated();
+  const [legendVisibility, setLegendVisibility] = useState(DEFAULT_LEGEND_VISIBILITY);
   const hourlyPoints = buildChartData(day.hours, exercisePrefs, dogPrefs);
   const lineData = withMidnightAnchor(hourlyPoints);
   const windowResult =
@@ -396,8 +451,7 @@ export function DayChart({
     hourlyPoints,
     activityMode,
     exercisePrefs,
-    dogPrefs,
-    units
+    dogPrefs
   );
   const chartTemps = lineData.flatMap((d) => [d.airTemp, d.apparentTemp, d.pavementTemp]);
   const { min: minTemp, max: maxTemp } = getTempAxisDomain(
@@ -408,7 +462,6 @@ export function DayChart({
   const activityLabel = activityMode === "exercise" ? "Exercise" : "Dog walk";
   const thresholdStroke =
     thresholdLine?.type === "max" ? "#ea580c" : "#0284c7";
-  const currentHour = getCurrentHour(now, timezone);
   const tempTimeMarkers = useMemo(
     () =>
       buildChartTimeMarkers({
@@ -420,27 +473,29 @@ export function DayChart({
       }),
     [day.sunrise, day.sunset, timezone, showCurrentTime, now]
   );
-  const sunTimeMarkers = useMemo(
-    () =>
-      buildChartTimeMarkers({
-        sunrise: day.sunrise,
-        sunset: day.sunset,
-        timezone,
-        showNow: false,
-        now,
-      }),
-    [day.sunrise, day.sunset, timezone, now]
-  );
-  const tempMarkerOffsets = useMemo(
-    () => assignChartMarkerLabelOffsets(tempTimeMarkers),
+  const topMarkerOffsets = useMemo(
+    () => assignChartMarkerLabelOffsets(tempTimeMarkers, "top"),
     [tempTimeMarkers]
   );
-  const sunMarkerOffsets = useMemo(
-    () => assignChartMarkerLabelOffsets(sunTimeMarkers),
-    [sunTimeMarkers]
+  const bottomMarkerOffsets = useMemo(
+    () => assignChartMarkerLabelOffsets(tempTimeMarkers, "insideBottom"),
+    [tempTimeMarkers]
   );
-  const tempChartTopMargin = getChartMarkerTopMargin(tempMarkerOffsets);
-  const sunChartTopMargin = getChartMarkerTopMargin(sunMarkerOffsets);
+  const tempMarkerOffsets = useMemo(() => {
+    const combined = new Map<string, number>();
+    for (const [id, offset] of topMarkerOffsets) combined.set(id, offset);
+    for (const [id, offset] of bottomMarkerOffsets) combined.set(id, offset);
+    return combined;
+  }, [topMarkerOffsets, bottomMarkerOffsets]);
+  const tempChartTopMargin = getChartMarkerTopMargin(topMarkerOffsets);
+  const tempChartBottomMargin = getChartMarkerBottomMargin(bottomMarkerOffsets);
+
+  function setLegendItem<K extends keyof ChartLegendVisibility>(
+    key: K,
+    value: ChartLegendVisibility[K]
+  ) {
+    setLegendVisibility((current) => ({ ...current, [key]: value }));
+  }
 
   return (
     <div
@@ -465,16 +520,16 @@ export function DayChart({
       <div
         className={
           fillViewport
-            ? "h-0 min-h-[10rem] w-full min-w-0 flex-[3] sm:min-h-[12rem]"
+            ? "h-0 min-h-[12rem] w-full min-w-0 flex-1 sm:min-h-[16rem]"
             : "h-60 w-full min-w-0 sm:h-72"
         }
       >
         {hydrated ? (
           <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <ComposedChart
-              key={`${label}-temp-${activityMode}-${exercisePrefs.maxRealFeel}-${dogPrefs.maxPavement}-${dogPrefs.sensitivity}-${minTemp}-${maxTemp}-${thresholdLine?.value ?? "none"}`}
+              key={`${label}-temp-${activityMode}-${exercisePrefs.maxRealFeel}-${dogPrefs.maxPavement}-${minTemp}-${maxTemp}-${thresholdLine?.value ?? "none"}`}
               data={lineData}
-              margin={{ top: tempChartTopMargin, right: 8, left: 0, bottom: 4 }}
+              margin={{ top: tempChartTopMargin, right: 8, left: 0, bottom: tempChartBottomMargin }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
               <XAxis {...hourXAxisProps} />
@@ -490,18 +545,22 @@ export function DayChart({
               />
               <Tooltip content={<TempTooltip units={units} />} />
 
-              {hourlyPoints.map((point) => (
-                <ReferenceArea
-                  key={`shade-${point.hour}-${point[statusKey]}`}
-                  yAxisId="temp"
-                  x1={point.hour}
-                  x2={point.hour + 1}
-                  fill={statusColors[point[statusKey]] ?? "#ffe4e6"}
-                  fillOpacity={point[statusKey] === "too_hot" ? 0.28 : 0.38}
-                  strokeOpacity={0}
-                />
-              ))}
+              {hourlyPoints.map((point) => {
+                if (!isShadingStatusVisible(point[statusKey], legendVisibility)) return null;
+                return (
+                  <ReferenceArea
+                    key={`shade-${point.hour}-${point[statusKey]}`}
+                    yAxisId="temp"
+                    x1={point.hour}
+                    x2={point.hour + 1}
+                    fill={statusColors[point[statusKey]] ?? "#ffe4e6"}
+                    fillOpacity={point[statusKey] === "too_hot" ? 0.28 : 0.38}
+                    strokeOpacity={0}
+                  />
+                );
+              })}
 
+              {legendVisibility.air && (
               <Line
                 yAxisId="temp"
                 type="monotone"
@@ -512,6 +571,8 @@ export function DayChart({
                 name="Air"
                 isAnimationActive={false}
               />
+              )}
+              {legendVisibility.realFeel && (
               <Line
                 yAxisId="temp"
                 type="monotone"
@@ -523,6 +584,8 @@ export function DayChart({
                 name="Real feel"
                 isAnimationActive={false}
               />
+              )}
+              {legendVisibility.pavement && (
               <Line
                 yAxisId="temp"
                 type="monotone"
@@ -533,14 +596,21 @@ export function DayChart({
                 name="Pavement est."
                 isAnimationActive={false}
               />
+              )}
 
-              {thresholdLine && (
+              {thresholdLine && legendVisibility.threshold && (
                 <ReferenceLine
                   yAxisId="temp"
                   y={thresholdLine.value}
                   stroke={thresholdStroke}
                   strokeWidth={2}
                   strokeDasharray="6 4"
+                  label={{
+                    value: thresholdLine.label,
+                    position: "insideTopLeft",
+                    fill: thresholdStroke,
+                    fontSize: 11,
+                  }}
                 />
               )}
 
@@ -556,6 +626,8 @@ export function DayChart({
                 dayDate={day.date}
                 timezone={timezone}
                 yAxisId="temp"
+                now={now}
+                labelOffset={Math.max(0, ...topMarkerOffsets.values(), 0)}
               />
             </ComposedChart>
           </ResponsiveContainer>
@@ -564,134 +636,59 @@ export function DayChart({
         )}
       </div>
 
-      <div className={`flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600 ${fillViewport ? "mb-2 mt-2" : "mb-3 mt-5"}`}>
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-0.5 w-4 bg-sky-500" /> Air
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-0.5 w-4 border-t-2 border-dashed border-orange-500" />{" "}
-          Real feel
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-0.5 w-4 bg-red-600" /> Pavement est.
-        </span>
-        {thresholdLine && (
-          <span className="flex items-center gap-1">
-            <span
-              className={`inline-block h-0.5 w-4 border-t-2 border-dashed ${
-                thresholdLine.type === "max" ? "border-orange-600" : "border-sky-600"
-              }`}
-            />{" "}
-            {thresholdLine.label}
-          </span>
-        )}
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-2 w-4 rounded-sm bg-emerald-200" /> Good
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-2 w-4 rounded-sm bg-yellow-300" /> Caution
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-2 w-4 rounded-sm bg-orange-500" /> Too hot / unsafe
-        </span>
-      </div>
-
-      <div className={`flex min-h-0 flex-col border-t border-slate-100 pt-3 ${fillViewport ? "flex-[2]" : ""}`}>
-        <div className="mb-1 text-sm font-medium text-slate-500">Humidity & rain chance</div>
-
-        <div
-          className={
-            fillViewport
-              ? "h-0 min-h-[6rem] w-full min-w-0 flex-1 sm:min-h-[7rem]"
-              : "h-32 w-full min-w-0 sm:h-36"
+      <div
+        className={`flex w-full flex-wrap items-start justify-center gap-x-8 gap-y-3 text-sm text-slate-600 ${
+          fillViewport ? "mb-2 mt-2" : "mb-3 mt-5"
+        }`}
+      >
+        <ChartLegendItem
+          label="Air"
+          checked={legendVisibility.air}
+          onChange={(checked) => setLegendItem("air", checked)}
+          swatch={<span className="inline-block h-0.5 w-4 bg-sky-500" />}
+        />
+        <ChartLegendItem
+          label="Real feel"
+          checked={legendVisibility.realFeel}
+          onChange={(checked) => setLegendItem("realFeel", checked)}
+          swatch={
+            <span className="inline-block h-0.5 w-4 border-t-2 border-dashed border-orange-500" />
           }
-        >
-          {hydrated ? (
-            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-              <ComposedChart
-                key={`${label}-moisture-${activityMode}`}
-                data={lineData}
-                margin={{ top: sunChartTopMargin, right: 8, left: 0, bottom: 4 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                <XAxis {...hourXAxisProps} />
-                <YAxis
-                  yAxisId="moisture"
-                  type="number"
-                  domain={[0, 100]}
-                  tick={axisProps.tick}
-                  axisLine={axisProps.axisLine}
-                  tickFormatter={(v) => `${v}%`}
-                  width={48}
-                />
-                <Tooltip content={<MoistureTooltip />} />
-
-                <Bar
-                  yAxisId="moisture"
-                  dataKey="precipProb"
-                  fill="#6366f1"
-                  fillOpacity={0.3}
-                  barSize={8}
-                  radius={[2, 2, 0, 0]}
-                  isAnimationActive={false}
-                >
-                  {lineData.map((entry, index) => (
-                    <Cell
-                      key={`precip-${index}`}
-                      fill={entry.precipProb > 40 ? "#6366f1" : "#a5b4fc"}
-                    />
-                  ))}
-                </Bar>
-
-                <Line
-                  yAxisId="moisture"
-                  type="monotone"
-                  dataKey="humidity"
-                  stroke="#0ea5e9"
-                  strokeWidth={2}
-                  dot={false}
-                  name="Humidity"
-                  isAnimationActive={false}
-                />
-
-                <ChartTimeReferenceLines
-                  markers={sunTimeMarkers}
-                  offsets={sunMarkerOffsets}
-                  yAxisId="moisture"
-                />
-
-                <ActivityWindowReferenceLines
-                  mustStartBy={windowResult.mustStartBy}
-                  waitUntilAfter={windowResult.waitUntilAfter}
-                  dayDate={day.date}
-                  timezone={timezone}
-                  yAxisId="moisture"
-                />
-
-                {showCurrentTime && (
-                  <ReferenceLine
-                    yAxisId="moisture"
-                    x={currentHour}
-                    stroke="#1e293b"
-                    strokeWidth={2}
-                    strokeDasharray="3 3"
-                  />
-                )}
-              </ComposedChart>
-            </ResponsiveContainer>
-          ) : (
-            <ChartPlaceholder />
-          )}
-        </div>
-
-        <div className="mt-3 flex flex-wrap gap-4 text-sm text-slate-600">
-          <span className="flex items-center gap-1">
-            <span className="inline-block h-0.5 w-4 bg-sky-500" /> Humidity
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="inline-block h-2 w-2 rounded-sm bg-indigo-400/60" /> Rain chance
-          </span>
-        </div>
+        />
+        <ChartLegendItem
+          label="Pavement est."
+          checked={legendVisibility.pavement}
+          onChange={(checked) => setLegendItem("pavement", checked)}
+          swatch={<span className="inline-block h-0.5 w-4 bg-red-600" />}
+        />
+        {thresholdLine && (
+          <ChartLegendItem
+            label={thresholdLine.label}
+            checked={legendVisibility.threshold}
+            onChange={(checked) => setLegendItem("threshold", checked)}
+            swatch={
+              <span className="inline-block h-0.5 w-4 border-t-2 border-dashed border-orange-600" />
+            }
+          />
+        )}
+        <ChartLegendItem
+          label="Good"
+          checked={legendVisibility.good}
+          onChange={(checked) => setLegendItem("good", checked)}
+          swatch={<span className="inline-block h-2 w-4 rounded-sm bg-emerald-200" />}
+        />
+        <ChartLegendItem
+          label="Caution"
+          checked={legendVisibility.caution}
+          onChange={(checked) => setLegendItem("caution", checked)}
+          swatch={<span className="inline-block h-2 w-4 rounded-sm bg-yellow-300" />}
+        />
+        <ChartLegendItem
+          label="Too hot / unsafe"
+          checked={legendVisibility.unsafe}
+          onChange={(checked) => setLegendItem("unsafe", checked)}
+          swatch={<span className="inline-block h-2 w-4 rounded-sm bg-orange-500" />}
+        />
       </div>
     </div>
   );

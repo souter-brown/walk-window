@@ -13,6 +13,48 @@ interface GeocodingResultItem {
   country_code?: string;
   admin1?: string;
   postcodes?: string[];
+  feature_code?: string;
+}
+
+const SETTLEMENT_FEATURE_CODES = new Set([
+  "PPL",
+  "PPLA",
+  "PPLA2",
+  "PPLA3",
+  "PPLA4",
+  "PPLC",
+  "PPLG",
+  "PPLH",
+  "PPLL",
+  "PPLQ",
+  "PPLR",
+  "PPLS",
+  "PPLW",
+  "PPLX",
+  "STLMT",
+]);
+
+function isSettlement(featureCode?: string): boolean {
+  if (!featureCode) return true;
+  return SETTLEMENT_FEATURE_CODES.has(featureCode);
+}
+
+function filterSettlementResults(results: GeocodingResultItem[]): GeocodingResultItem[] {
+  const filtered = results.filter((result) => isSettlement(result.feature_code));
+  return filtered.length > 0 ? filtered : results;
+}
+
+/** Ask the user to pick when several places match or the query is an inexact place name. */
+export function shouldConfirmLocationPick(
+  query: string,
+  candidates: GeocodingResult[]
+): boolean {
+  if (candidates.length === 0) return false;
+  if (candidates.length > 1) return true;
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const primaryName = candidates[0].name.split(",")[0]?.trim().toLowerCase() ?? "";
+  return primaryName !== normalizedQuery;
 }
 
 interface OpenMeteoGeocodingResponse {
@@ -125,11 +167,13 @@ export async function searchLocations(query: string): Promise<GeocodingResult[]>
   const data = (await response.json()) as OpenMeteoGeocodingResponse;
   if (!data.results?.length) return [];
 
+  const results = filterSettlementResults(data.results);
+
   if (isUsZipCode(trimmed)) {
-    return [mapOpenMeteoResult(pickOpenMeteoZipMatch(data.results, trimmed))];
+    return [mapOpenMeteoResult(pickOpenMeteoZipMatch(results, trimmed))];
   }
 
-  return data.results.map(mapOpenMeteoResult);
+  return results.map(mapOpenMeteoResult);
 }
 
 export async function geocodeLocation(query: string): Promise<GeocodingResult> {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import type { GeocodingResult } from "@/types/weather";
 
 interface LocationPickerModalProps {
@@ -29,8 +30,10 @@ export function LocationPickerModal({
     };
   }, [onClose]);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-end justify-center p-4 sm:items-center">
       <button
         type="button"
         className="absolute inset-0 bg-slate-900/50 backdrop-blur-[1px]"
@@ -48,7 +51,13 @@ export function LocationPickerModal({
             Choose a location
           </h2>
           <p className="mt-1 text-sm text-slate-600">
-            Multiple places match &ldquo;{query}&rdquo;. Pick the one you want.
+            {candidates.length > 1 ? (
+              <>
+                Multiple places match &ldquo;{query}&rdquo;. Pick the one you want.
+              </>
+            ) : (
+              <>Did you mean this place for &ldquo;{query}&rdquo;?</>
+            )}
           </p>
         </div>
 
@@ -71,6 +80,7 @@ export function LocationPickerModal({
           ))}
         </ul>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

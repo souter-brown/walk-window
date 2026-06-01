@@ -28,6 +28,36 @@ export function getLocalHour(time: Date, timezone: string): number {
   return raw === 24 ? 0 : raw;
 }
 
+export function getLocalMinute(time: Date, timezone: string): number {
+  return parseInt(
+    new Intl.DateTimeFormat("en-US", {
+      minute: "numeric",
+      timeZone: timezone,
+    }).format(time),
+    10
+  );
+}
+
+export function isLocalMidnight(time: Date, timezone: string): boolean {
+  return getLocalHour(time, timezone) === 0 && getLocalMinute(time, timezone) === 0;
+}
+
+export const DAY_START_LABEL = "Start of day";
+export const DAY_END_LABEL = "End of day";
+
+/** Like formatTime, but uses plain day-boundary labels at local midnight. */
+export function formatWindowTime(
+  date: Date | null,
+  timezone?: string,
+  role: "start" | "end" = "end"
+): string {
+  if (!date) return "—";
+  if (timezone && isLocalMidnight(date, timezone)) {
+    return role === "start" ? DAY_START_LABEL : DAY_END_LABEL;
+  }
+  return formatTime(date, timezone);
+}
+
 /** Fractional local hour for chart x-axis positioning (e.g. 6:30 → 6.5). */
 export function getChartHour(time: Date, timezone: string): number {
   const hour = getLocalHour(time, timezone);
@@ -114,21 +144,55 @@ export function isSameDay(a: Date, b: Date): boolean {
   );
 }
 
-export function isSameLocalDay(a: Date, b: Date, timezone: string): boolean {
-  const dayKey = (date: Date) =>
-    new Intl.DateTimeFormat("en-CA", {
-      timeZone: timezone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(date);
-  return dayKey(a) === dayKey(b);
+export function getLocalDayKey(date: Date, timezone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
 }
 
-/** Forecast days are ordered in the location's local timezone (index 0 = today there). */
-export function getDayLabel(index: number, date: Date, timezone: string): string {
-  if (index === 0) return "Today";
-  if (index === 1) return "Tomorrow";
+export function isSameLocalDay(a: Date, b: Date, timezone: string): boolean {
+  return getLocalDayKey(a, timezone) === getLocalDayKey(b, timezone);
+}
+
+function getTomorrowLocalDayKey(now: Date, timezone: string): string {
+  const todayKey = getLocalDayKey(now, timezone);
+  let cursor = now.getTime() + 3_600_000;
+  const limit = now.getTime() + 48 * 3_600_000;
+
+  while (cursor <= limit) {
+    const key = getLocalDayKey(new Date(cursor), timezone);
+    if (key !== todayKey) return key;
+    cursor += 3_600_000;
+  }
+
+  return getLocalDayKey(new Date(now.getTime() + 86_400_000), timezone);
+}
+
+/** True when the first forecast day is not the current local calendar day. */
+export function isForecastStale(
+  firstDayDate: Date | undefined,
+  now: Date,
+  timezone: string
+): boolean {
+  if (!firstDayDate) return false;
+  return !isSameLocalDay(firstDayDate, now, timezone);
+}
+
+/** Forecast day labels follow the location's local calendar, not array index. */
+export function getDayLabel(
+  index: number,
+  date: Date,
+  timezone: string,
+  now: Date = new Date()
+): string {
+  void index;
+  const dateKey = getLocalDayKey(date, timezone);
+  const todayKey = getLocalDayKey(now, timezone);
+  if (dateKey === todayKey) return "Today";
+  if (dateKey === getTomorrowLocalDayKey(now, timezone)) return "Tomorrow";
   return formatDateShort(date, timezone);
 }
 

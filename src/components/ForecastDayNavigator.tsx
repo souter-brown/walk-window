@@ -106,18 +106,19 @@ export function ForecastDayNavigator({
         <div className="col-start-1 row-start-1 min-w-0 sm:justify-self-start">
           <h2 className="text-lg font-bold text-slate-900">{dayLabel}</h2>
           <p className="text-sm text-slate-700">
-            Day {dayIndex + 1} of {dayCount} · Use ← → keys
+            Day {dayIndex + 1} of {dayCount}
+            <span className="hidden sm:inline"> · Use ← → keys</span>
           </p>
         </div>
 
         {header && (
-          <div className="col-start-2 row-start-1 min-w-0 justify-self-end sm:col-start-3">
+          <div className="col-span-2 col-start-1 row-start-2 hidden min-w-0 md:col-span-1 md:col-start-3 md:row-start-1 md:block md:justify-self-end">
             {header}
           </div>
         )}
 
         {centerHeader && (
-          <div className="col-span-2 col-start-1 row-start-2 w-full justify-self-center sm:col-span-1 sm:col-start-2 sm:row-start-1 sm:w-auto sm:px-2">
+          <div className="col-span-2 col-start-1 row-start-2 w-full justify-self-center md:col-span-1 md:col-start-2 md:row-start-1 md:w-auto md:px-2">
             {centerHeader}
           </div>
         )}

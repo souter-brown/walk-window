@@ -33,10 +33,17 @@ export interface TimeWindow {
 }
 
 export interface ActivityWindowResult {
+  /** Active, first upcoming, or longest window — used for must-start-by. */
   bestWindow: TimeWindow | null;
+  safeWindows: TimeWindow[];
   mustStartBy: Date | null;
   waitUntilAfter: Date | null;
   status: SafetyStatus;
+}
+
+export interface MobileSafeWindowLine {
+  text: string;
+  isPrimary: boolean;
 }
 
 export interface DayAnalysis {
