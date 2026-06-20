@@ -196,6 +196,31 @@ export function getDayLabel(
   return formatDateShort(date, timezone);
 }
 
+export function getLocalTimeInputValue(date: Date, timezone: string): string {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: timezone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+
+  const hour = parts.find((part) => part.type === "hour")?.value ?? "00";
+  const minute = parts.find((part) => part.type === "minute")?.value ?? "00";
+  return `${hour}:${minute}`;
+}
+
+export function buildDateFromLocalTime(
+  base: Date,
+  timeValue: string,
+  timezone: string
+): Date | null {
+  const match = timeValue.match(/^(\d{2}):(\d{2})$/);
+  if (!match) return null;
+
+  const dayKey = getLocalDayKey(base, timezone);
+  return parseForecastLocalTime(`${dayKey}T${match[1]}:${match[2]}`, timezone);
+}
+
 export function formatTimezoneShort(timezone: string, date: Date = new Date()): string {
   const part = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,

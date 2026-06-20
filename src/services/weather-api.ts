@@ -73,6 +73,7 @@ interface OpenMeteoForecastResponse {
     temperature_2m: number[];
     apparent_temperature: number[];
     relative_humidity_2m: number[];
+    dew_point_2m: number[];
     precipitation_probability: number[];
     cloud_cover: number[];
     uv_index: number[];
@@ -324,6 +325,7 @@ function buildHourlyWeather(
     airTemp,
     apparentTemp,
     humidity: data.hourly.relative_humidity_2m[index],
+    dewPoint: data.hourly.dew_point_2m[index],
     precipitationProbability,
     cloudCover,
     uvIndex,
@@ -352,6 +354,7 @@ export async function fetchWeatherForecast(
       "temperature_2m",
       "apparent_temperature",
       "relative_humidity_2m",
+      "dew_point_2m",
       "precipitation_probability",
       "cloud_cover",
       "uv_index",

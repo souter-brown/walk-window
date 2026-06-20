@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { STORAGE_KEY } from "@/lib/constants";
 import { DEFAULT_PREFERENCES } from "@/types/preferences";
-import type { UserPreferences, ExercisePreferences, DogWalkPreferences } from "@/types/preferences";
+import type { UserPreferences, ExercisePreferences, DogWalkPreferences, RunPacePreferences } from "@/types/preferences";
 
 const PREFERENCES_EVENT = "walk-window-preferences";
 
@@ -32,6 +32,16 @@ function parsePreferences(raw: string | null): UserPreferences {
         durationMinutes:
           parsed.dogWalk?.durationMinutes ?? DEFAULT_PREFERENCES.dogWalk.durationMinutes,
         maxPavement: parsed.dogWalk?.maxPavement ?? DEFAULT_PREFERENCES.dogWalk.maxPavement,
+      },
+      runPace: {
+        baselinePace:
+          parsed.runPace?.baselinePace ?? DEFAULT_PREFERENCES.runPace.baselinePace,
+        missionDistanceMiles:
+          parsed.runPace?.missionDistanceMiles ??
+          DEFAULT_PREFERENCES.runPace.missionDistanceMiles,
+        defaultDurationMinutes:
+          parsed.runPace?.defaultDurationMinutes ??
+          DEFAULT_PREFERENCES.runPace.defaultDurationMinutes,
       },
     };
   } catch {
@@ -101,9 +111,10 @@ export function useHasSavedPreferences(): boolean {
 }
 
 export function updatePreferences(
-  partial: Partial<Omit<UserPreferences, "exercise" | "dogWalk">> & {
+  partial: Partial<Omit<UserPreferences, "exercise" | "dogWalk" | "runPace">> & {
     exercise?: Partial<ExercisePreferences>;
     dogWalk?: Partial<DogWalkPreferences>;
+    runPace?: Partial<RunPacePreferences>;
   }
 ): UserPreferences {
   const current = loadPreferences();
@@ -112,6 +123,7 @@ export function updatePreferences(
     ...partial,
     exercise: { ...current.exercise, ...partial.exercise },
     dogWalk: { ...current.dogWalk, ...partial.dogWalk },
+    runPace: { ...current.runPace, ...partial.runPace },
   };
   savePreferences(updated);
   return updated;

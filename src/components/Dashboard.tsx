@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { LocationSelector } from "@/components/LocationSelector";
 import { WelcomeScreen } from "@/components/WelcomeScreen";
 import { LocationPickerModal } from "@/components/LocationPickerModal";
@@ -12,7 +13,8 @@ import { UnitToggle } from "@/components/InlinePreferenceControls";
 import { ForecastDayNavigator } from "@/components/ForecastDayNavigator";
 import { analyzeForecast, isDogWalkHourSafe, isExerciseHourSafe } from "@/lib/window-calculation";
 import { convertPreferencesUnits } from "@/lib/temperature";
-import { getLocalDayKey, isForecastStale, isSameLocalDay } from "@/lib/time-utils";
+import { isSameLocalDay } from "@/lib/time-utils";
+import { useWeatherForecast } from "@/hooks/useWeatherForecast";
 import {
   fetchWeatherForLocation,
   fetchWeatherForecast,
@@ -30,7 +32,7 @@ import type {
   ExercisePreferences,
   TemperatureUnit,
 } from "@/types/preferences";
-import type { GeocodingResult, WeatherForecast, HourlyWeather } from "@/types/weather";
+import type { GeocodingResult, HourlyWeather } from "@/types/weather";
 
 interface LocationPickerState {
   query: string;
@@ -39,48 +41,32 @@ interface LocationPickerState {
 
 export function Dashboard() {
   const preferences = usePreferences();
-  const locationKey = preferences.location
-    ? `${preferences.location.latitude},${preferences.location.longitude}`
-    : null;
   const [chartActivity, setChartActivity] = useState<ChartActivityMode>("exercise");
   const [zipDraft, setZipDraft] = useState<string | null>(null);
   const zipInput = zipDraft ?? preferences.location?.zip ?? "";
-  const [forecast, setForecast] = useState<WeatherForecast | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [staleRefreshError, setStaleRefreshError] = useState<string | null>(null);
-  const [now, setNow] = useState(() => new Date());
   const [dayIndex, setDayIndex] = useState(0);
-  const [trackedLocationKey, setTrackedLocationKey] = useState(locationKey);
   const [locationPicker, setLocationPicker] = useState<LocationPickerState | null>(
     null
   );
-  const staleRefreshRef = useRef<{ inFlight: boolean; attemptedForDay: string | null }>({
-    inFlight: false,
-    attemptedForDay: null,
-  });
+  const handleRefreshSuccess = useCallback(() => setDayIndex(0), []);
+  const {
+    forecast,
+    setForecast,
+    loading,
+    setLoading,
+    error,
+    setError,
+    staleRefreshError,
+    now,
+    locationKey,
+    handleRetryStaleRefresh,
+  } = useWeatherForecast({ onRefreshSuccess: handleRefreshSuccess });
+  const [trackedLocationKey, setTrackedLocationKey] = useState(locationKey);
 
   if (locationKey !== trackedLocationKey) {
     setTrackedLocationKey(locationKey);
     setDayIndex(0);
   }
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 60_000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    function onVisibilityChange() {
-      if (document.visibilityState !== "visible") return;
-      setNow(new Date());
-      staleRefreshRef.current.attemptedForDay = null;
-      setStaleRefreshError(null);
-    }
-
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
-  }, []);
 
   const handleExerciseChange = useCallback((partial: Partial<ExercisePreferences>) => {
     updatePreferences({ exercise: partial });
@@ -126,7 +112,7 @@ export function Dashboard() {
         setLoading(false);
       }
     },
-    []
+    [setError, setForecast, setLoading]
   );
 
   const loadWeather = useCallback(
@@ -152,7 +138,7 @@ export function Dashboard() {
         setLoading(false);
       }
     },
-    [applyLocation]
+    [applyLocation, setError, setForecast, setLoading]
   );
 
   const loadWeatherByCoords = useCallback(
@@ -183,79 +169,8 @@ export function Dashboard() {
         setLoading(false);
       }
     },
-    []
+    [setError, setForecast, setLoading]
   );
-
-  const refreshForecast = useCallback(
-    async ({ background = false }: { background?: boolean } = {}) => {
-      const savedLocation = loadPreferences().location;
-      if (!savedLocation?.latitude || !savedLocation.longitude) return false;
-
-      const { latitude, longitude } = savedLocation;
-      const units = loadPreferences().units;
-
-      if (!background) {
-        setLoading(true);
-        setError(null);
-        setStaleRefreshError(null);
-      }
-
-      try {
-        const data = await fetchWeatherForecast(latitude, longitude, units);
-        setForecast(data);
-        setDayIndex(0);
-        setStaleRefreshError(null);
-        return true;
-      } catch (err) {
-        if (background) {
-          setStaleRefreshError(
-            "Couldn’t refresh today’s forecast. Showing the last saved data."
-          );
-        } else {
-          setError(err instanceof Error ? err.message : "Something went wrong.");
-          setForecast(null);
-        }
-        return false;
-      } finally {
-        if (!background) setLoading(false);
-      }
-    },
-    []
-  );
-
-  useEffect(() => {
-    if (!locationKey) return;
-    startTransition(() => {
-      void refreshForecast();
-    });
-  }, [locationKey, preferences.units, refreshForecast]);
-
-  useEffect(() => {
-    if (!forecast?.days[0] || !locationKey) return;
-
-    const timezone = forecast.location.timezone;
-    if (!isForecastStale(forecast.days[0].date, now, timezone)) {
-      staleRefreshRef.current.attemptedForDay = null;
-      return;
-    }
-
-    const todayKey = getLocalDayKey(now, timezone);
-    const state = staleRefreshRef.current;
-    if (state.inFlight || state.attemptedForDay === todayKey) return;
-
-    state.inFlight = true;
-    state.attemptedForDay = todayKey;
-
-    void refreshForecast({ background: true }).finally(() => {
-      state.inFlight = false;
-    });
-  }, [now, forecast, locationKey, refreshForecast]);
-
-  const handleRetryStaleRefresh = useCallback(() => {
-    staleRefreshRef.current.attemptedForDay = null;
-    setStaleRefreshError(null);
-    void refreshForecast({ background: true });
-  }, [refreshForecast]);
 
   function handleSearch(query: string) {
     void loadWeather(query);
@@ -385,6 +300,14 @@ export function Dashboard() {
           </h1>
           <p className="min-w-0 text-sm text-slate-600">
             Find the best times to exercise or walk your dog — today and the next two days.
+          </p>
+          <p className="min-w-0 text-sm">
+            <Link
+              href="/run-pace-mission"
+              className="font-medium text-sky-800 underline decoration-sky-800/30 underline-offset-2 hover:text-sky-950"
+            >
+              Run Pace Mission
+            </Link>
           </p>
         </div>
         {!showWelcome && (

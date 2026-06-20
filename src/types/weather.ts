@@ -12,6 +12,7 @@ export interface HourlyWeather {
   airTemp: number;
   apparentTemp: number;
   humidity: number;
+  dewPoint: number;
   precipitationProbability: number;
   cloudCover: number;
   uvIndex: number;

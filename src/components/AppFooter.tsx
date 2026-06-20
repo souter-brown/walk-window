@@ -1,3 +1,7 @@
+"use client";
+
+import Link from "next/link";
+
 const CREATOR_NAME = "Josh Souter-Brown";
 const CREATOR_URL = "https://www.souter-brown.com";
 
@@ -67,6 +71,15 @@ export function AppFooter() {
             <ExternalLink href="https://react.dev/">React</ExternalLink>, and{" "}
             <ExternalLink href="https://recharts.org/">Recharts</ExternalLink>.
           </p>
+          <p>
+            Add-on:{" "}
+            <Link
+              href="/run-pace-mission"
+              className="font-medium text-sky-800 underline decoration-sky-800/30 underline-offset-2 hover:text-sky-950"
+            >
+              Run Pace Mission
+            </Link>
+          </p>
         </FooterPanel>
 
         <FooterPanel title="Privacy & data">
@@ -77,9 +90,10 @@ export function AppFooter() {
             location is not stored on our servers.
           </p>
           <p>
-            Your exercise and dog-walk preferences, plus your last chosen location, are
-            saved in this browser&apos;s local storage only. Clearing site data removes
-            them.
+            Your exercise and dog-walk preferences, Run Pace Mission settings (baseline
+            pace, mission distance, and default time on feet), plus your last chosen
+            location, are saved in this browser&apos;s local storage only. Clearing site
+            data removes them.
           </p>
           <p>
             Pavement temperature and walk windows are estimates for planning — not
