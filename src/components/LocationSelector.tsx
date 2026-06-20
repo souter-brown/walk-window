@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { formatTimezoneShort } from "@/lib/time-utils";
 
 interface LocationSelectorProps {
@@ -12,6 +13,8 @@ interface LocationSelectorProps {
   timezone?: string;
   now?: Date;
   compact?: boolean;
+  /** Renders inline after the location buttons (e.g. unit toggle). */
+  trailing?: ReactNode;
   /** Centered search for the welcome / start screen */
   welcome?: boolean;
 }
@@ -34,7 +37,7 @@ function LocationCaption({
   if (compact) {
     return (
       <p
-        className="max-w-[16rem] truncate text-right text-xs text-slate-700"
+        className="truncate text-xs text-slate-700 sm:max-w-[16rem] sm:text-right"
         title={caption}
       >
         {caption}
@@ -81,6 +84,7 @@ export function LocationSelector({
   timezone,
   now,
   compact = false,
+  trailing,
   welcome = false,
 }: LocationSelectorProps) {
   function handleSubmit(e: React.FormEvent) {
@@ -121,8 +125,8 @@ export function LocationSelector({
 
   if (compact) {
     return (
-      <div className="flex flex-col items-end gap-1">
-        <form onSubmit={handleSubmit} className="flex items-center gap-1.5">
+      <div className="flex flex-col items-stretch gap-1 sm:items-end">
+        <form onSubmit={handleSubmit} className="flex flex-wrap items-center gap-1.5">
           <input
             id="location"
             type="text"
@@ -131,7 +135,7 @@ export function LocationSelector({
             aria-label="City or ZIP code"
             value={zip}
             onChange={(e) => onZipChange(e.target.value)}
-            className="w-28 rounded-md border border-slate-400 bg-white px-2 py-1.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-500 focus:border-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-200 sm:w-36"
+            className="w-20 rounded-md border border-slate-400 bg-white px-2 py-1.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-500 focus:border-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-200 sm:w-36"
           />
           <button
             type="submit"
@@ -145,6 +149,7 @@ export function LocationSelector({
             disabled={loading}
             size="compact"
           />
+          {trailing}
         </form>
         {locationName && (
           <LocationCaption

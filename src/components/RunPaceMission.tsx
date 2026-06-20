@@ -6,11 +6,13 @@ import { LocationSelector } from "@/components/LocationSelector";
 import { LocationPickerModal } from "@/components/LocationPickerModal";
 import { WelcomeScreen } from "@/components/WelcomeScreen";
 import { StepperNumberInput, UnitToggle } from "@/components/InlinePreferenceControls";
+import { PaceCalculationDetails, StartTimePaceChart, DisclosureChevron } from "@/components/RunPaceMissionCharts";
 import { useWeatherForecast } from "@/hooks/useWeatherForecast";
 import {
   flattenForecastHours,
   findClosestHour,
   formatPaceBreakdown,
+  getCoolPaceThresholdLabel,
   getRunPaceRecommendation,
   parsePaceToSeconds,
 } from "@/lib/run-pace-mission";
@@ -43,24 +45,70 @@ interface LocationPickerState {
 
 function Field({
   label,
-  helper,
   children,
+  className = "",
 }: {
   label: string;
-  helper?: string;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <label className="block">
+    <label className={`block ${className}`.trim()}>
       <span className="mb-1 block text-sm font-medium text-slate-700">{label}</span>
       {children}
-      {helper && <span className="mt-1 block text-xs text-slate-500">{helper}</span>}
     </label>
   );
 }
 
+const cardClassName =
+  "rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4";
+
+const nowButtonClassName =
+  "shrink-0 rounded-lg border border-slate-400 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50";
+
+function SectionTitle({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <h2 className={`text-sm font-semibold text-slate-900 ${className}`.trim()}>{children}</h2>
+  );
+}
+
+function StatRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex justify-between gap-3">
+      <dt className="shrink-0 text-slate-600">{label}</dt>
+      <dd className="text-right font-medium text-slate-900">{value}</dd>
+    </div>
+  );
+}
+
+function DetailCard({
+  title,
+  subtitle,
+  children,
+  className = "",
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`${cardClassName} flex h-full min-h-0 flex-col sm:min-h-32 ${className}`}>
+      <SectionTitle>{title}</SectionTitle>
+      {subtitle && <p className="mt-0.5 text-xs text-slate-600">{subtitle}</p>}
+      <dl className="mt-auto flex flex-col justify-center space-y-2 pt-3 text-sm">{children}</dl>
+    </div>
+  );
+}
+
 const inputClassName =
-  "w-full rounded-lg border border-slate-400 bg-white px-3 py-2 text-base text-slate-900 shadow-sm focus:border-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-200";
+  "rounded-lg border border-slate-400 bg-white px-2 py-2 text-base tabular-nums text-slate-900 shadow-sm focus:border-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-200";
 
 function roundDurationMinutes(totalSeconds: number): number {
   const minutes = Math.round(totalSeconds / 60);
@@ -254,6 +302,10 @@ export function RunPaceMission() {
       ? roundDurationMinutes(recommendation.estimatedMissionTimeSeconds)
       : null;
 
+  const resetStartTimeToNow = useCallback(() => {
+    setStartTimeValue(getLocalTimeInputValue(now, timezone));
+  }, [now, timezone]);
+
   const showMatchWeatherButton =
     suggestedDurationMinutes !== null &&
     durationMinutes === preferences.runPace.defaultDurationMinutes &&
@@ -261,11 +313,22 @@ export function RunPaceMission() {
 
   const paceBreakdown = recommendation ? formatPaceBreakdown(recommendation) : null;
   const baselinePaceValid = parsePaceToSeconds(baselinePace) !== null;
+  const coolPaceThresholdLabel = getCoolPaceThresholdLabel(preferences.units);
   const forecastUnavailable = recommendation?.missionPaceLabel === "Forecast unavailable";
+  const showPaceFinishLine =
+    !!recommendation &&
+    (forecastUnavailable ||
+      recommendation.estimatedMissionTimeLabel !== "—" ||
+      showMatchWeatherButton);
+
+  const paceDetailsTeaser =
+    paceBreakdown ??
+    (recommendation?.runWalkRecommended ? "Run/walk recommended" : null) ??
+    (forecastUnavailable ? "Forecast unavailable" : null);
 
   return (
-    <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col px-3 py-3 sm:px-5 sm:py-4">
-      <header className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col px-3 py-2 sm:px-5 sm:py-3">
+      <header className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className="mb-1 text-sm font-medium text-sky-900">
             <Link href="/" className="hover:underline">
@@ -281,7 +344,7 @@ export function RunPaceMission() {
           </p>
         </div>
         {!showWelcome && (
-          <div className="flex shrink-0 flex-wrap items-start justify-end gap-2">
+          <div className="sm:ms-auto">
             <LocationSelector
               compact
               zip={zipInput}
@@ -307,11 +370,13 @@ export function RunPaceMission() {
               locationName={forecast?.location.name}
               timezone={timezone}
               now={now}
-            />
-            <UnitToggle
-              value={preferences.units}
-              onChange={(units) =>
-                updatePreferences(convertPreferencesUnits(loadPreferences(), units))
+              trailing={
+                <UnitToggle
+                  value={preferences.units}
+                  onChange={(units) =>
+                    updatePreferences(convertPreferencesUnits(loadPreferences(), units))
+                  }
+                />
               }
             />
           </div>
@@ -379,28 +444,34 @@ export function RunPaceMission() {
             </div>
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:col-span-2">
-              <h2 className="text-base font-semibold text-slate-900">Mission inputs</h2>
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <Field label="Start time">
-                  <input
-                    type="time"
-                    value={startTimeValue}
-                    onChange={(event) => setStartTimeValue(event.target.value)}
-                    className={inputClassName}
-                  />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className={`${cardClassName} sm:col-span-2 lg:col-span-3`}>
+              <SectionTitle>Mission inputs</SectionTitle>
+              <div className="mt-3 flex flex-wrap items-end gap-x-5 gap-y-3 sm:gap-x-6">
+                <Field label="Start time" className="w-auto">
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="time"
+                      value={startTimeValue}
+                      onChange={(event) => setStartTimeValue(event.target.value)}
+                      className={`${inputClassName} w-[8.25rem]`}
+                    />
+                    <button
+                      type="button"
+                      onClick={resetStartTimeToNow}
+                      className={nowButtonClassName}
+                      aria-label="Set start time to now"
+                    >
+                      [Now]
+                    </button>
+                  </div>
                 </Field>
-                <Field
-                  label="Time on feet (minutes)"
-                  helper="Weather is checked at start + this time."
-                >
+                <Field label="Time on feet (min)" className="w-auto">
                   <StepperNumberInput
                     value={durationMinutes}
                     min={15}
                     max={240}
                     step={5}
-                    suffix="min"
                     aria-label="Time on feet"
                     onChange={(value) => {
                       setDurationMinutes(value);
@@ -408,11 +479,12 @@ export function RunPaceMission() {
                     }}
                   />
                 </Field>
-                <Field label="Cool-weather baseline pace (mm:ss / mile)">
+                <Field label={`Cool pace (${coolPaceThresholdLabel})`} className="w-auto">
                   <input
                     type="text"
                     inputMode="numeric"
                     placeholder="10:15"
+                    title={`Pace at Real Feel below ${coolPaceThresholdLabel} (mm:ss per mile)`}
                     value={baselinePace}
                     onChange={(event) => setBaselinePace(event.target.value)}
                     onBlur={() => {
@@ -420,10 +492,10 @@ export function RunPaceMission() {
                         persistRunPacePrefs({ baselinePace });
                       }
                     }}
-                    className={inputClassName}
+                    className={`${inputClassName} w-[4.75rem] text-center`}
                   />
                 </Field>
-                <Field label="Mission distance (miles)">
+                <Field label="Distance (mi)" className="w-auto">
                   <input
                     type="number"
                     min={0.1}
@@ -439,7 +511,7 @@ export function RunPaceMission() {
                     onBlur={() =>
                       persistRunPacePrefs({ missionDistanceMiles: missionDistanceMiles })
                     }
-                    className={inputClassName}
+                    className={`${inputClassName} w-[3.75rem] text-center`}
                   />
                 </Field>
               </div>
@@ -447,54 +519,81 @@ export function RunPaceMission() {
 
             {recommendation && baselinePaceValid && (
               <>
-                <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:col-span-2">
-                  <p className="text-sm font-medium uppercase tracking-wide text-slate-500">
-                    Weather-adjusted mission pace
-                  </p>
-                  <p className="mt-2 text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
-                    {recommendation.missionPaceLabel}
-                  </p>
-                  {forecastUnavailable && (
-                    <p className="mt-2 text-sm text-amber-800">
-                      End time is outside the loaded forecast window.
+                <div className="grid items-stretch gap-3 sm:col-span-2 sm:grid-cols-2 lg:col-span-3">
+                  <div className={`${cardClassName} flex min-h-0 flex-col sm:min-h-32`}>
+                    <SectionTitle>Mission pace</SectionTitle>
+                    <p className="mt-3 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+                      {recommendation.missionPaceLabel}
                     </p>
-                  )}
-                  {!forecastUnavailable && recommendation.estimatedMissionTimeLabel !== "—" && (
-                    <p className="mt-2 text-sm text-slate-600">
-                      Estimated {missionDistanceMiles.toFixed(1)} mi finish: ~
-                      {recommendation.estimatedMissionTimeLabel}
-                      {estimatedFinishTime && (
-                        <>
-                          {" "}
-                          at{" "}
-                          <span className="font-semibold text-slate-900">
-                            {formatTime(estimatedFinishTime, timezone)}
-                          </span>
-                        </>
-                      )}
-                    </p>
-                  )}
-                  {paceBreakdown && (
-                    <p className="mt-1 text-sm text-slate-500">{paceBreakdown}</p>
-                  )}
-                  {showMatchWeatherButton && suggestedDurationMinutes !== null && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDurationMinutes(suggestedDurationMinutes);
-                        persistRunPacePrefs({ defaultDurationMinutes: suggestedDurationMinutes });
-                      }}
-                      className="mt-3 text-sm font-medium text-sky-800 underline decoration-sky-800/30 underline-offset-2 hover:text-sky-950"
-                    >
-                      Match weather to finish time? ({suggestedDurationMinutes} min)
-                    </button>
-                  )}
+                    {showPaceFinishLine && (
+                      <div className="mt-auto space-y-1.5 pt-3 text-sm">
+                        {forecastUnavailable && (
+                          <p className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-amber-800">
+                            End time is outside the loaded forecast window.
+                          </p>
+                        )}
+                        {!forecastUnavailable && recommendation.estimatedMissionTimeLabel !== "—" && (
+                          <p className="text-slate-700">
+                            Estimated {missionDistanceMiles.toFixed(1)} mi finish:{" "}
+                            <span className="font-medium text-slate-900">
+                              ~{recommendation.estimatedMissionTimeLabel}
+                            </span>
+                            {estimatedFinishTime && (
+                              <>
+                                {" "}
+                                at{" "}
+                                <span className="font-medium text-slate-900">
+                                  {formatTime(estimatedFinishTime, timezone)}
+                                </span>
+                              </>
+                            )}
+                          </p>
+                        )}
+                        {showMatchWeatherButton && suggestedDurationMinutes !== null && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDurationMinutes(suggestedDurationMinutes);
+                              persistRunPacePrefs({
+                                defaultDurationMinutes: suggestedDurationMinutes,
+                              });
+                            }}
+                            className="font-medium text-sky-800 underline decoration-sky-800/30 underline-offset-2 hover:text-sky-950"
+                          >
+                            Match weather to finish time? ({suggestedDurationMinutes} min)
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <DetailCard
+                    title="End-of-run forecast"
+                    subtitle={`At ${formatTime(recommendation.endTime, timezone)} weather check`}
+                  >
+                    <StatRow
+                      label="Real Feel"
+                      value={
+                        recommendation.endHour
+                          ? formatTemp(recommendation.endHour.apparentTemp, preferences.units)
+                          : "—"
+                      }
+                    />
+                    <StatRow
+                      label="Dew point"
+                      value={
+                        recommendation.endHour
+                          ? formatTemp(recommendation.endHour.dewPoint, preferences.units)
+                          : "—"
+                      }
+                    />
+                  </DetailCard>
                 </div>
 
                 {recommendation.warnings.length > 0 && (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm sm:col-span-2">
-                    <h3 className="text-sm font-semibold text-amber-950">Mission warnings</h3>
-                    <ul className="mt-2 space-y-1 text-sm text-amber-900">
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm sm:col-span-2 lg:col-span-3">
+                    <SectionTitle className="text-amber-950">Mission warnings</SectionTitle>
+                    <ul className="mt-3 space-y-1 text-sm text-amber-900">
                       {recommendation.warnings.map((warning) => (
                         <li key={warning}>{warning}</li>
                       ))}
@@ -502,93 +601,93 @@ export function RunPaceMission() {
                   </div>
                 )}
 
-                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <h3 className="text-sm font-semibold text-slate-900">Timing</h3>
-                  <dl className="mt-3 space-y-2 text-sm text-slate-700">
-                    <div className="flex justify-between gap-3">
-                      <dt>Start time</dt>
-                      <dd className="font-medium text-slate-900">
-                        {startTime ? formatTime(startTime, timezone) : "—"}
-                      </dd>
-                    </div>
-                    <div className="flex justify-between gap-3">
-                      <dt>Time on feet</dt>
-                      <dd className="font-medium text-slate-900">{durationMinutes} min</dd>
-                    </div>
-                    <div className="flex justify-between gap-3">
-                      <dt>Weather checked at</dt>
-                      <dd className="font-medium text-slate-900">
-                        {formatTime(recommendation.endTime, timezone)}
-                      </dd>
-                    </div>
+                <div className="grid items-stretch gap-3 sm:col-span-2 sm:grid-cols-2 lg:col-span-3">
+                  <DetailCard title="Timing">
+                    <StatRow
+                      label="Weather checked at"
+                      value={formatTime(recommendation.endTime, timezone)}
+                    />
                     {estimatedFinishTime && (
-                      <div className="flex justify-between gap-3">
-                        <dt>Estimated finish</dt>
-                        <dd className="font-medium text-slate-900">
-                          {formatTime(estimatedFinishTime, timezone)}
-                        </dd>
-                      </div>
+                      <StatRow
+                        label="Estimated finish"
+                        value={formatTime(estimatedFinishTime, timezone)}
+                      />
                     )}
-                    <div className="flex justify-between gap-3">
-                      <dt>Baseline pace used</dt>
-                      <dd className="font-medium text-slate-900">
-                        {recommendation.baselinePaceLabel} / mile
-                      </dd>
-                    </div>
-                  </dl>
+                  </DetailCard>
+
+                  {recommendation.currentHour && (
+                    <DetailCard title="Current conditions">
+                      <StatRow
+                        label="Real Feel"
+                        value={formatTemp(
+                          recommendation.currentHour.apparentTemp,
+                          preferences.units
+                        )}
+                      />
+                      <StatRow
+                        label="Dew point"
+                        value={formatTemp(
+                          recommendation.currentHour.dewPoint,
+                          preferences.units
+                        )}
+                      />
+                    </DetailCard>
+                  )}
                 </div>
 
-                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <h3 className="text-sm font-semibold text-slate-900">End-of-run forecast</h3>
-                  <dl className="mt-3 space-y-2 text-sm text-slate-700">
-                    <div className="flex justify-between gap-3">
-                      <dt>Real Feel at end</dt>
-                      <dd className="font-medium text-slate-900">
-                        {recommendation.endHour
-                          ? formatTemp(recommendation.endHour.apparentTemp, preferences.units)
-                          : "—"}
-                      </dd>
-                    </div>
-                    <div className="flex justify-between gap-3">
-                      <dt>Dew point at end</dt>
-                      <dd className="font-medium text-slate-900">
-                        {recommendation.endHour
-                          ? formatTemp(recommendation.endHour.dewPoint, preferences.units)
-                          : "—"}
-                      </dd>
-                    </div>
-                  </dl>
-                </div>
-
-                {recommendation.currentHour && (
-                  <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:col-span-2">
-                    <h3 className="text-sm font-semibold text-slate-900">Current conditions</h3>
-                    <dl className="mt-3 grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
-                      <div className="flex justify-between gap-3 sm:block">
-                        <dt>Real Feel now</dt>
-                        <dd className="font-medium text-slate-900">
-                          {formatTemp(
-                            recommendation.currentHour.apparentTemp,
-                            preferences.units
-                          )}
-                        </dd>
+                {forecast && startTime && (
+                  <details className={`${cardClassName} group sm:col-span-2 lg:col-span-3`}>
+                    <summary className="flex cursor-pointer list-none items-start gap-2 text-sm hover:text-slate-950 [&::-webkit-details-marker]:hidden">
+                      <DisclosureChevron className="mt-0.5" />
+                      <div className="min-w-0 flex-1">
+                        <span className="font-semibold text-slate-900">Pace details</span>
+                        {paceDetailsTeaser && (
+                          <span className="mt-1 block font-normal text-slate-500 sm:mt-0 sm:ml-2 sm:inline">
+                            {paceDetailsTeaser}
+                          </span>
+                        )}
                       </div>
-                      <div className="flex justify-between gap-3 sm:block">
-                        <dt>Dew point now</dt>
-                        <dd className="font-medium text-slate-900">
-                          {formatTemp(recommendation.currentHour.dewPoint, preferences.units)}
-                        </dd>
-                      </div>
-                    </dl>
-                  </div>
+                    </summary>
+                    <div className="mt-4 border-t border-slate-100 pt-4">
+                      <PaceCalculationDetails
+                        recommendation={recommendation}
+                        timezone={timezone}
+                        units={preferences.units}
+                      />
+                    </div>
+                  </details>
                 )}
               </>
             )}
 
             {!baselinePaceValid && (
-              <p className="text-sm text-rose-700 sm:col-span-2">
-                Enter a valid baseline pace like 10:15.
+              <p className="text-sm text-rose-700 sm:col-span-2 lg:col-span-3">
+                Enter a valid cool-weather pace like 10:15.
               </p>
+            )}
+
+            {forecast && startTime && (
+              <div className={`${cardClassName} sm:col-span-2 lg:col-span-3`}>
+                <StartTimePaceChart
+                  forecast={forecast}
+                  startTime={startTime}
+                  endTime={recommendation?.endTime ?? null}
+                  now={now}
+                  durationMinutes={durationMinutes}
+                  baselinePace={baselinePace}
+                  missionDistanceMiles={missionDistanceMiles}
+                  timezone={timezone}
+                  units={preferences.units}
+                  selectedPaceLabel={
+                    baselinePaceValid ? recommendation?.missionPaceLabel : undefined
+                  }
+                  selectedPaceMinutes={
+                    baselinePaceValid && recommendation?.missionPaceSeconds != null
+                      ? recommendation.missionPaceSeconds / 60
+                      : null
+                  }
+                />
+              </div>
             )}
           </div>
         </>
